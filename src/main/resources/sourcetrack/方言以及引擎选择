@@ -1,0 +1,119 @@
+        //日志-->跟踪如何得出方言
+		Dialect:170 -HHH000400: Using dialect: org.hibernate.dialect.MySQL57Dialect
+
+		//jdbc信息初始化
+		JdbcEnvironmentInitiator-->
+		Dialect dialect = dialectFactory.buildDialect(
+							configurationValues,
+							new DialectResolutionInfoSource() {
+								@Override
+								public DialectResolutionInfo getDialectResolutionInfo() {
+									try {
+										return new DatabaseMetaDataDialectResolutionInfoAdapter( connection.getMetaData() );
+									}
+									catch ( SQLException sqlException ) {
+										throw new HibernateException(
+												"Unable to access java.sql.DatabaseMetaData to determine appropriate Dialect to use",
+												sqlException
+										);
+									}
+								}
+							}
+					);
+
+        //方言工厂build，如果配置有指定就行，如果没有指定通过StandardDialectResolver获取
+		org.hibernate.engine.jdbc.dialect.internal.DialectFactoryImpl
+		@Override
+		public Dialect buildDialect(Map configValues, DialectResolutionInfoSource resolutionInfoSource) throws HibernateException {
+			final Object dialectReference = configValues.get( AvailableSettings.DIALECT );
+			if ( !isEmpty( dialectReference ) ) {
+				return constructDialect( dialectReference );
+			}
+			else {
+				return determineDialect( resolutionInfoSource );
+			}
+		}
+
+		//如何得出数据库方言
+		public final class StandardDialectResolver implements DialectResolver {
+
+			@Override
+			public Dialect resolveDialect(DialectResolutionInfo info) {
+
+				for ( Database database : Database.values() ) {
+					Dialect dialect = database.resolveDialect( info );
+					if ( dialect != null ) {
+						return dialect;
+					}
+				}
+				return null;
+			}
+		}
+
+       org.hibernate.dialect.Database
+		MYSQL {
+        public Class<? extends Dialect> latestDialect() {
+            return MySQL8Dialect.class;
+        }
+
+        public Dialect resolveDialect(DialectResolutionInfo info) {
+            String databaseName = info.getDatabaseName();
+            if ("MySQL".equals(databaseName)) {
+                int majorVersion = info.getDatabaseMajorVersion();
+                int minorVersion = info.getDatabaseMinorVersion();
+                if (majorVersion < 5) {
+                    return new MySQLDialect();
+                } else if (majorVersion == 5) {
+                    if (minorVersion < 5) {
+                        return new MySQL5Dialect();
+                    } else {
+                        return (Dialect)(minorVersion < 7 ? new MySQL55Dialect() : new MySQL57Dialect());
+                    }
+                } else if (majorVersion < 8) {
+                    return new MySQL57Dialect();
+                } else {
+                    return (Dialect)(majorVersion == 8 ? new MySQL8Dialect() : Database.latestDialectInstance(this));
+                }
+            } else {
+                return null;
+            }
+        }
+    }
+
+		//如何得出存储类型，https://www.cnblogs.com/jinxiao-pu/p/8647121.html
+
+		MyISAM没有考虑到应用到高并发高负载，多核CPU和RAID阵列的场景，也不能弹性扩展，会在表级锁上等待数秒(MyISAM只支持这种锁机制)
+
+　     自MySQL存在以来MyISAM存储引擎就有一个兄弟叫InnoDB。并且高并发负载，性能和弹性(也包括原子性，一致性和隔离)正是它的特长。
+       在InnoDB发展过程中也有过一些问题(尤其是2006年5.0.30之前的版本的性能问题)，而MyISAM已经很少被关注了。
+　　   因此，从MySQL 5.5.5开始，InnoDB成为默认的存储引擎，现在你几乎找不到大型MySQL数据库的安装使用MyISAM而不是InnoDB。
+		//如果未指定则默认使用MyISAMStorageEngine(会根据实际使用的MySQL55Dialect指定InnoDBStorageEngine)
+		public public class MySQLDialect extends Dialect {
+		   	protected MySQLStorageEngine getDefaultMySQLStorageEngine() {
+				return MyISAMStorageEngine.INSTANCE;
+			}
+	  }
+
+		String storageEngine = Environment.getProperties().getProperty( Environment.STORAGE_ENGINE );//hibernate.dialect.storage_engine
+		if ( storageEngine == null ) {
+			this.storageEngine = getDefaultMySQLStorageEngine();
+		}
+		else if( "innodb".equals( storageEngine.toLowerCase() ) ) {
+			this.storageEngine = InnoDBStorageEngine.INSTANCE;
+		}
+		else if( "myisam".equals( storageEngine.toLowerCase() ) ) {
+			this.storageEngine = MyISAMStorageEngine.INSTANCE;
+		}
+		else {
+			throw new UnsupportedOperationException( "The storage engine '" + storageEngine + "' is not supported!" );
+		}
+
+
+
+
+       public class MySQL55Dialect extends MySQL5Dialect {
+	   @Override
+		protected MySQLStorageEngine getDefaultMySQLStorageEngine() {
+			return InnoDBStorageEngine.INSTANCE;
+		}
+	   }

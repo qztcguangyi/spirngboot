@@ -1,0 +1,25 @@
+    EmbeddedDatabaseType.H2
+	EmbeddedDatabaseType.DERBY
+	EmbeddedDatabaseType.HSQL
+
+    //默认属性逻辑：
+	//根据数据库链接信息判断是否是内嵌数据库：String productName = connection.getMetaData().getDatabaseProductName();
+	//如果是用create-drop 否则指定默认值none
+    Supplier<String> defaultDdlAuto = () -> (EmbeddedDatabaseConnection.isEmbedded(dataSource) ? "create-drop"
+				: "none");
+	//决定最终ddl属性，如果yml中有进行配置就优先使用否则使用上一步确定下来的默认属性
+	private String determineDdlAuto(Map<String, String> existing, Supplier<String> defaultDdlAuto) {
+		String ddlAuto = existing.get(AvailableSettings.HBM2DDL_AUTO);
+		if (ddlAuto != null) {
+			return ddlAuto;
+		}
+		return (this.ddlAuto != null) ? this.ddlAuto : defaultDdlAuto.get();
+	}
+	//none情况移除该属性
+     if (StringUtils.hasText(ddlAuto) && !"none".equals(ddlAuto)) {
+			result.put(AvailableSettings.HBM2DDL_AUTO, ddlAuto);
+	 } else {
+			result.remove(AvailableSettings.HBM2DDL_AUTO);
+	}
+
+	PS:AvailableSettings有很多相关配置
